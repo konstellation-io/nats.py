@@ -2765,6 +2765,14 @@ class OBJTest(SingleJetStreamServerTestCase):
 
         assert obr.data == filevalue
 
+        await obs.delete(name=filename)
+
+        info = await obs.get_info(name=filename)
+
+        assert info.deleted is True
+        assert info.size == 0
+        assert info.chunks == 0
+
         res = await js.delete_object_store(bucket=bucketname)
 
         assert res == True
