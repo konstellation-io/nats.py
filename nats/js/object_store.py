@@ -310,6 +310,43 @@ class ObjectStore:
 
         return info
 
+    async def delete(self, name: str):
+        """
+        Delete will remove the object from the underlying stream.
+        """
+        obj = self.__sanitize_name(name)
+
+        if not key_valid(obj):
+            raise InvalidObjectNameError
+
+        # Grab meta info.
+        info = await self.get_info(obj)
+
+        if info.nuid is None or info.nuid == "":
+            raise BadObjectMetaError
+
+        # Place a rollup delete marker and publish the info.
+        info.deleted = True
+        info.size = 0
+        info.chunks = 0
+        info.digest = None
+
+        meta_subj = OBJ_META_PRE_TEMPLATE.format(
+            bucket=self._name,
+            obj=base64.urlsafe_b64encode(bytes(obj, "utf-8")).decode().rstrip("=")
+        )
+        await self._js.publish(
+            meta_subj,
+            json.dumps(info.as_dict()).encode(),
+            headers={api.Header.ROLLUP: MSG_ROLLUP_SUBJECT}
+        )
+
+        # Purge chunks for the object.
+        chunk_subj = OBJ_CHUNKS_PRE_TEMPLATE.format(
+            bucket=self._name, obj=info.nuid
+        )
+        await self._js.purge_stream(self._stream, subject=chunk_subj)
+
 
 # TODO: Functions left to implement
 #
